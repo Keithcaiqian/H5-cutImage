@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no" />
+        <title>图像处理</title>
+        <link rel="stylesheet" href="mui/mui.css" /> //可以不用
+        <link rel="stylesheet" href="common/common.css" /> //公共样式
+        <link rel="stylesheet" href="dist/image-clip.css" />
+        <link rel="stylesheet" href="common/clip.css" /> //公共样式
+    </head>
+
+    <body>
+        <div class="clip-content">
+            <!--选取图片的input-->
+            <div class="upload-container choose-gallery">
+                <div class="upload-pretty button-three-dimen">
+                    <input type="file" id="targetImg" accept="image/jp2,image/jpeg,image/png">本地上传
+                </div>
+            </div>
+
+            <!--存放正在剪切图片的容器，class必须为img-clip因为css定义的样式是这个class-->
+            <div class="img-clip"></div>
+
+            <!--裁剪图片的取消和确定按钮，可以自定义按钮和事件-->
+            <nav class="clip-action nav-bar nav-bar-tab hidden">
+                <a class="tab-item" id="btn-reload">
+                    <span class="mui-icon mui-icon-arrowleft tab-icon"></span>
+                    <span class="tab-label hidden">取消</span>
+                </a>
+                <a class="tab-item" id="btn-verify">
+                    <span class="mui-icon mui-icon-checkmarkempty tab-icon"></span>
+                    <span class="tab-label hidden">确定</span>
+                </a>
+            </nav>
+        </div>
+        <!--裁剪并确定后存放图片的容器-->
+        <div class="show-content hidden">
+            <div class="img-wrap">
+                <img class="show-img" data-preview-src="" data-preview-group="2"></img>
+            </div>
+        </div>
+        <script type="text/javascript" src="common/fileinput.js"></script>//必须引入
+        <script type="text/javascript" src="common/exif.js"></script>//必须引入
+        <script type="text/javascript" src="dist/image-clip.js"></script>//必须引入
+        <script>
+            const confirmDom = document.getElementById('btn-verify');
+            const cancelDom = document.getElementById('btn-reload');
+            const showImg = document.getElementsByClassName('show-img')[0];
+            const clipAction = document.getElementsByClassName('clip-action')[0];
+            const showContent = document.getElementsByClassName('show-content')[0];
+            <!--第一步  初始化变量-->
+            let cropImage = null
+           <!--第二步  初始化img-->
+           initImgClip('#targetImg','.clip-content .img-clip',function () {
+               clipAction.classList.remove('hidden'); //显示底部确定取消按钮
+           })
+           /**
+            * 初始化截图插件
+            * @param id input的id
+            * container为选取的图片的容器
+            * fun为回调函数
+            */
+           function initImgClip(id,container,fun) {
+               new FileInput({
+                   container: id,
+                   isMulti: false,
+                   type: 'Image_Camera',
+                   success: function(b64, file, detail) {
+                       if(fun){
+                           fun()
+                       }
+                       var img = new Image();
+                       img.src = b64;
+
+                       img.onload = function() {
+                           EXIF.getData(img, function() {
+                               var orientation = EXIF.getTag(this, 'Orientation');
+
+                               cropImage && cropImage.destroy();
+                               cropImage = new ImageClip({
+                                   container: container,
+                                   img,
+                                   // 0代表按下才显示，1恒显示，-1不显示
+                                   sizeTipsStyle: 0,
+                                   // 为1一般是屏幕像素x2这个宽高
+                                   // 最终的大小为：屏幕像素*屏幕像素比（手机中一般为2）*compressScaleRatio
+                                   compressScaleRatio: 1.1,
+                                   // iphone中是否继续放大：x*iphoneFixedRatio
+                                   // 最好compressScaleRatio*iphoneFixedRatio不要超过2
+                                   iphoneFixedRatio: 1.8,
+                                   // 减去顶部间距，底部bar,以及显示间距
+                                   maxCssHeight: window.innerHeight - 96 - 200 - 88,
+                                   // 放大镜捕获的图像半径
+                                   captureRadius: 30,
+                                   // 是否采用原图像素（不会压缩）
+                                   isUseOriginSize: false,
+                                   // 增加最大宽度，增加后最大不会超过这个宽度
+                                   maxWidth: 0,
+                                   // 是否固定框高，优先级最大，设置后其余所有系数都无用直接使用这个固定的宽，高度自适应
+                                   forceWidth: 0,
+                                   // 同上，但是一般不建议设置，因为很可能会改变宽高比导致拉升，特殊场景下使用
+                                   forceHeight: 0,
+                                   // 压缩质量
+                                   quality: 0.92,
+                                   mime: 'image/jpeg',
+                               });
+
+                               // 6代表图片需要顺时针修复（默认逆时针处理了，所以需要顺过来修复）
+                               switch (orientation) {
+                                   case 6:
+                                       cropImage.rotate(true);
+                                       break;
+                                   default:
+                                       break;
+                               }
+
+                           });
+                       };
+                   },
+                   error: function(error) {
+                       console.error(error);
+                   }
+               });
+           }
+
+            <!--第三步  确定取消按钮绑定事件-->
+            cancelDom.onclick = function () {
+                cropImage && cropImage.destroy();
+                clipAction.classList.add('hidden');
+            }
+            confirmDom.onclick = function () {
+                cropImage.clip(false);
+                let imgData = cropImage.getClipImgData();
+                showImg.src = imgData
+                showContent.classList.remove('hidden');
+                clipAction.classList.add('hidden');
+                cropImage && cropImage.destroy();
+                //防止第二次不能选择相同的图片
+                targetImg.type = 'text'
+                targetImg.type = 'file'
+            }
+        </script>
+    </body>
+
+</html>
